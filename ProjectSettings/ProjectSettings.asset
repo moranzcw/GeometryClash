@@ -12,7 +12,7 @@ PlayerSettings:
   targetDevice: 2
   useOnDemandResources: 0
   accelerometerFrequency: 60
-  companyName: DefaultCompany
+  companyName: "\u5F20\u6210\u609F"
   productName: Geometry Clash
   defaultCursor: {fileID: 0}
   cursorHotspot: {x: 0, y: 0}
