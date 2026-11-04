@@ -1,0 +1,63 @@
+# ---------------------------------------------------------------
+# Unity 工程 .gitignore
+# 核心原则：只提交「能重建工程」的东西 —— Assets / Packages / ProjectSettings。
+# Library（本工程 3.4G）、Temp、Logs、UserSettings 全部是本地生成物，不进仓库。
+# ---------------------------------------------------------------
+
+# ---- Unity 自动生成的目录 ----
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Assets 下的 .meta 必须提交（Unity 靠它维持引用），只忽略被忽略资源的 meta
+!/[Aa]ssets/**/*.meta
+
+# ---- 本工程的构建产物 ----
+/webbuild/
+*.apk
+*.aab
+*.unitypackage
+*.app
+
+# ---- IDE / 自动生成的工程文件 ----
+.vs/
+.idea/
+.vscode/
+.gradle/
+ExportedObj/
+.consulo/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# ---- 崩溃 / 分析 ----
+sysinfo.txt
+crashlytics-build.properties
+
+# ---- 系统文件 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 本地 AI 工具目录（想保留开发日志就删掉这一行）----
+/.workbuddy-ai/
