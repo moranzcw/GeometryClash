@@ -5,6 +5,9 @@
 一个致敬《几何战争：复古进化》(Geometry Wars: Retro Evolved) 的双摇杆射击游戏。
 **没有任何美术/音频资源**：所有网格、材质、粒子、音效都在运行时由代码生成。
 
+> **[在浏览器里直接玩 →](https://play.unity.com/en/games/56f625fd-fdff-44f4-a08b-75962a3f008b/geometry-clash)**
+> 不用下载，WebGL 版本跑在 Unity Play 上。
+
 ![Geometry Clash 游戏截图](screenshot.png)
 
 ## 运行方式

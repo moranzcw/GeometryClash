@@ -6,6 +6,9 @@ A neon twin-stick shooter built in Unity 6 + URP, inspired by Geometry Wars: Ret
 **No art or audio assets whatsoever** — every mesh, material, particle and sound effect is generated
 procedurally at runtime.
 
+> **[Play it in your browser →](https://play.unity.com/en/games/56f625fd-fdff-44f4-a08b-75962a3f008b/geometry-clash)**
+> No download needed — it runs as a WebGL build on Unity Play.
+
 ![Geometry Clash gameplay](screenshot.png)
 
 ## Getting started
