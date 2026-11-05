@@ -32,11 +32,8 @@ namespace GeoClash
         public int Score, Lives, Bombs, Wave, Best;
         public float Multiplier = 1f;
 
-        /// <summary>
-        /// 无限生命：阵亡后照常走复活流程（黑洞坍缩 + 无敌环），但不扣命、也不会进 GameOver。
-        /// 关掉就恢复成原来的 3 条命。
-        /// </summary>
-        public bool InfiniteLives = true;
+        /// <summary>开局生命数。</summary>
+        public const int StartLives = 10;
 
         [Header("Runtime References (assigned in Awake)")]
         public Camera Cam;
@@ -691,7 +688,7 @@ namespace GeoClash
         {
             Time.timeScale = 1f;
             Score = 0;
-            Lives = 3;
+            Lives = StartLives;
             Bombs = 3;
             Wave = 0;
             Multiplier = 1f;
@@ -764,17 +761,17 @@ namespace GeoClash
             deathPos = Player.transform.position;
 
             Player.Die();
-            if (!InfiniteLives) Lives--;
+            Lives--;
             Multiplier = Mathf.Max(1f, Multiplier * 0.5f);
 
-            if (!InfiniteLives && Lives < 0) GameOver();
+            if (Lives < 0) GameOver();
             else respawnTimer = 1.5f;
         }
 
         void UpdateRespawn(float dt)
         {
             if (PlayerAlive || State != GameState.Playing) return;
-            if (!InfiniteLives && Lives < 0) return;
+            if (Lives < 0) return;
             respawnTimer -= dt;
             if (respawnTimer <= 0f)
             {

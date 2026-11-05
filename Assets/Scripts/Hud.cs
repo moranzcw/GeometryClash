@@ -35,6 +35,7 @@ namespace GeoClash
         string centerMsg = "";
 
         int lastScore = -1;
+        int lastLives = -1;
         int lastBombs = -1;
         int lastWave = -1;
         int lastMult100 = -1;
@@ -351,11 +352,13 @@ namespace GeoClash
                     multText.text = "x" + (m100 / 100f).ToString("0.0");
                 }
 
-                if (lastWave != g.Wave || lastBombs != g.Bombs)
+                if (lastWave != g.Wave || lastLives != g.Lives || lastBombs != g.Bombs)
                 {
                     lastWave = g.Wave;
+                    lastLives = g.Lives;
                     lastBombs = g.Bombs;
                     infoText.text = "WAVE " + Mathf.Max(0, g.Wave).ToString("00") + "\n"
+                                    + Ships(g.Lives) + "\n"
                                     + BombsStr(g.Bombs);
                 }
 
@@ -393,6 +396,16 @@ namespace GeoClash
                 float k = Mathf.Sin(Time.unscaledTime * 2f) * 0.5f + 0.5f;
                 titleText.color = Color.Lerp(new Color(0.25f, 0.75f, 1f), new Color(0.85f, 0.98f, 1f), k);
             }
+        }
+
+        /// <summary>
+        /// 剩余生命。注意别用 ∞ 之类的特殊字形 —— HUD 字体没有那个字形，
+        /// WebGL 打包后会渲染成空框。
+        /// </summary>
+        static string Ships(int n)
+        {
+            if (n < 0) n = 0;
+            return "<color=#7FE3FF>SHIP \u00D7" + n + "</color>";
         }
 
         static string BombsStr(int n)
