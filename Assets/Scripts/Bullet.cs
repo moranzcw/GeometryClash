@@ -56,12 +56,18 @@ namespace GeoClash
             rend.sharedMaterial = MatLib.Neon(c);
         }
 
+        /// <summary>力场要不要也弯折敌方子弹。默认只影响玩家子弹（那是防御机制）。</summary>
+        const bool FieldsAffectEnemyBullets = false;
+
         void Update()
         {
             if (!Alive) return;
             float dt = Time.deltaTime;
             Life -= dt;
             if (Life <= 0f) { Despawn(); return; }
+
+            // 先被力场弯折弹道，再按新方向前进
+            ApplyFields(dt);
 
             Vector3 p = transform.position + new Vector3(Vel.x, Vel.y, 0f) * dt;
             transform.position = p;
@@ -88,6 +94,62 @@ namespace GeoClash
                 Fx.I.Impact(p, normal, color, Friendly ? 1f : 0.7f);
                 Despawn();
             }
+        }
+
+        /// <summary>
+        /// 引力井 / 黑洞的力场：把经过的子弹弯折。
+        ///
+        /// 关键做法：力只取**垂直于弹道**的分量。
+        ///  - 正对着场心飞来的子弹，这个分量恰好是 0 → 完全偏转不了（想要的手感）。
+        ///  - 只改变方向、不改变速度大小，所以子弹不会在半路被顶停或者反弹。
+        ///  - 离场心越近弯得越快，边缘线性收到 0，不会有一圈硬边界。
+        /// </summary>
+        void ApplyFields(float dt)
+        {
+            if (!Friendly && !FieldsAffectEnemyBullets) return;
+
+            var list = Enemy.Fields;
+            if (list == null || list.Count == 0) return;
+
+            float sp = Vel.magnitude;
+            if (sp < 1e-3f) return;
+
+            Vector2 bp = new Vector2(transform.position.x, transform.position.y);
+            Vector2 vdir = Vel / sp;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                var e = list[i];
+                if (e == null || e.Dead) continue;
+
+                float radius, bend, sign;
+                if (e.Kind == EnemyKind.Gravity)
+                {
+                    radius = Enemy.GravityFieldRadius;
+                    bend = Enemy.GravityBendRate;
+                    sign = -1f;              // 负号 = 把弹道往场心掰
+                }
+                else if (e.Kind == EnemyKind.Hole)
+                {
+                    radius = Enemy.HoleFieldRadius;
+                    bend = Enemy.HoleBendRate;
+                    sign = 1f;               // 正号 = 把弹道往外推
+                }
+                else continue;
+
+                Vector2 d = bp - new Vector2(e.Pos.x, e.Pos.y);
+                float dist = d.magnitude;
+                if (dist > radius || dist < 1e-3f) continue;
+
+                float k = 1f - dist / radius;
+                Vector2 rad = d / dist;
+
+                // perp 的大小正好是 sin(径向, 弹道) —— 正对着飞时它趋近 0
+                Vector2 perp = rad - Vector2.Dot(rad, vdir) * vdir;
+                vdir = (vdir + perp * (sign * bend * k * dt)).normalized;
+            }
+
+            Vel = vdir * sp;   // 速度大小严格不变，只改方向
         }
 
         public void Despawn()

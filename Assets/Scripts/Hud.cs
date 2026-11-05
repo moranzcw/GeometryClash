@@ -357,7 +357,9 @@ namespace GeoClash
                     lastWave = g.Wave;
                     lastLives = g.Lives;
                     lastBombs = g.Bombs;
-                    infoText.text = "WAVE " + Mathf.Max(0, g.Wave).ToString("00") + "\n" + Ships(g.Lives) + "\n" + BombsStr(g.Bombs);
+                    infoText.text = "WAVE " + Mathf.Max(0, g.Wave).ToString("00") + "\n"
+                                    + (g.InfiniteLives ? InfiniteShips() : Ships(g.Lives)) + "\n"
+                                    + BombsStr(g.Bombs);
                 }
 
                 float hp = g.BossHp01;
@@ -400,6 +402,11 @@ namespace GeoClash
         {
             if (n < 0) n = 0;
             return "<color=#7FE3FF>SHIP \u00D7" + n + "</color>";
+        }
+
+        static string InfiniteShips()
+        {
+            return "<color=#7FE3FF>SHIP \u00D7\u221E</color>";
         }
 
         static string BombsStr(int n)

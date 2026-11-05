@@ -11,6 +11,7 @@ namespace GeoClash
         static int cursor;
         static AudioSource music;
         static AudioClip sShoot, sHit, sExplode, sBigExplode, sGeom, sDeath, sBomb, sWave, sSpawn, sUi, sSpawnShip;
+        static float lastSpawnSfxAt = -1f;
 
         public static bool Muted;
         public static float Master = 0.55f;
@@ -103,7 +104,16 @@ namespace GeoClash
         public static void Death() { Play(sDeath, 1f, 1f); }
         public static void Bomb() { Play(sBomb, 1f, 1f); }
         public static void Wave() { Play(sWave, 1f, 1f); }
-        public static void Spawn() { Play(sSpawn, 1f, Random.Range(0.9f, 1.1f)); }
+        /// <summary>
+        /// 敌人出场音。均匀刷怪后每秒会冒 5~7 只，直接一只一声会变成机关枪，
+        /// 所以这里节流到 0.09 秒一次（听感上仍是"连成一片"，但不会糊）。
+        /// </summary>
+        public static void Spawn()
+        {
+            if (Time.unscaledTime - lastSpawnSfxAt < 0.09f) return;
+            lastSpawnSfxAt = Time.unscaledTime;
+            Play(sSpawn, 1f, Random.Range(0.9f, 1.1f));
+        }
         /// <summary>主角出场：激光扫过。</summary>
         public static void PlayerSpawn() { Play(sSpawnShip, 1f, Random.Range(0.97f, 1.03f)); }
         public static void Ui() { Play(sUi, 1f, 1f); }

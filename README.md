@@ -58,9 +58,9 @@ Multiplier), so you can watch the numbers change while playing.
   | Dodger | Green diamond | Circles away; splits into two small diamonds on death |
   | Spinner | Cyan hexagon | Hovers around, fires radial bullet patterns |
   | Chomper | Red triangle | Charges up, then dashes in a straight line |
-  | Gravity | Orange pentagon | Slow drift, continuously pulls the player toward it |
+  | Gravity | Orange pentagon | Slow drift. Its field bends passing bullets toward it and dents the grid inward |
   | Weevil | Small yellow triangle | Fast weaving pursuit |
-  | Hole | Magenta ring | Strong gravity, lethal on contact, high HP |
+  | Hole | Magenta ring | High HP. Its field flings passing bullets away and bulges the grid outward |
   | Boss | Large hexagon | Every 5th wave: spiral bullet patterns + summons Weevils |
 
 - **Wave system**: budget-based random composition; enemies fly in from off-screen in groups;

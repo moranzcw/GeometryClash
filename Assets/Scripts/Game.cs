@@ -32,6 +32,12 @@ namespace GeoClash
         public int Score, Lives, Bombs, Wave, Best;
         public float Multiplier = 1f;
 
+        /// <summary>
+        /// 无限生命：阵亡后照常走复活流程（黑洞坍缩 + 无敌环），但不扣命、也不会进 GameOver。
+        /// 关掉就恢复成原来的 3 条命。
+        /// </summary>
+        public bool InfiniteLives = true;
+
         [Header("Runtime References (assigned in Awake)")]
         public Camera Cam;
         public Vector3 CamBase;
@@ -47,7 +53,6 @@ namespace GeoClash
         Pool<Bullet> bulletPool;
         Pool<Geom> geomPool;
 
-        Vector2 pullAccum;
         float lastAspect = -1f;
         float respawnTimer;
         /// <summary>主角阵亡的位置，复活时就在这里原地重生。</summary>
@@ -78,6 +83,13 @@ namespace GeoClash
             public Vector3 Pos;
             public float Delay;
             public float Size;
+
+            /// <summary>
+            /// true = 位置在**发放那一刻**才算（围绕主角当前位置找一个远处的点）。
+            /// 均匀刷怪必须用这个：一波要铺开几十秒，预先算好的坐标会落在
+            /// 主角几十秒前站的地方，可能直接砸在脸上。
+            /// </summary>
+            public bool Live;
         }
 
         readonly List<SpawnReq> pending = new List<SpawnReq>();
@@ -88,7 +100,9 @@ namespace GeoClash
             EnemyKind.Chomper, EnemyKind.Gravity, EnemyKind.Weevil, EnemyKind.Hole
         };
         static readonly int[] Weights = { 4, 3, 2, 2, 2, 1, 3, 1 };
-        static readonly int[] UnlockWave = { 1, 1, 2, 3, 4, 5, 6, 8 };
+        // 顺序和 Kinds 一一对应：Grunt, Wanderer, Dodger, Spinner, Chomper, Gravity, Weevil, Hole
+        // 引力井第 3 波、黑洞第 5 波就登场（原先是 5 和 8，太靠后，很多人根本见不到）
+        static readonly int[] UnlockWave = { 1, 1, 2, 3, 4, 3, 6, 5 };
         static readonly int[] Cost = { 2, 2, 3, 4, 3, 5, 2, 6 };
 
         // ------------------------------------------------------------ 构建
@@ -435,18 +449,6 @@ namespace GeoClash
             Fx.I.Shockwave(pos, e.BaseColor, 2.6f, 0.3f);
         }
 
-        public void AddPlayerPull(Vector2 v)
-        {
-            pullAccum += v;
-        }
-
-        public Vector2 ConsumePull()
-        {
-            Vector2 p = pullAccum;
-            pullAccum = Vector2.zero;
-            return p;
-        }
-
         public void RemoveEnemy(Enemy e)
         {
             Enemies.Remove(e);
@@ -539,8 +541,7 @@ namespace GeoClash
 
             if (boss)
             {
-                Vector3 bp = SpawnPoint();
-                pending.Add(new SpawnReq { Kind = EnemyKind.Boss, Pos = bp, Delay = 1.2f, Size = 1f });
+                pending.Add(new SpawnReq { Kind = EnemyKind.Boss, Delay = 1.2f, Size = 1f, Live = true });
                 budget = (4 + n * 2) * 9;
             }
 
@@ -557,26 +558,54 @@ namespace GeoClash
                 else counts[k.Value] = 1;
             }
 
-            float delay = 0.8f;
+            // ---- 均匀刷怪 ----
+            // 以前是"按种类分组、每组 5~10 只一口气倒出来、隔 0.45 秒再倒一组"，
+            // 所以一波敌人几秒内就全在场上了。
+            // 现在先把整波要出的敌人摊平成一个列表、打散顺序，
+            // 再按固定间隔逐只发放 —— 敌人会从整波开头一路均匀滴到结尾。
+            var roster = new List<EnemyKind>();
             foreach (var kv in counts)
             {
-                int remaining = kv.Value;
-                float d = delay;
-                while (remaining > 0)
+                for (int i = 0; i < kv.Value; i++) roster.Add(kv.Key);
+            }
+            for (int i = roster.Count - 1; i > 0; i--)
+            {
+                int j = Random.Range(0, i + 1);
+                var tmp = roster[i];
+                roster[i] = roster[j];
+                roster[j] = tmp;
+            }
+
+            // ---- 分组成批刷怪 ----
+            // 一波的敌人先打散、再切成若干组：
+            //   组内几乎同时出现（形成一次"爆发"，能看出是同一批来的）
+            //   组与组之间留一段基础间隔（让玩家有喘息和清场的时间）
+            // 以前组间隔只有 0.45 秒，一波敌人十几秒就全涌出来了，几乎连成一片。
+            const float inGroupGap = 0.06f;      // 组内个体间隔
+            const float groupGap = 1.35f;        // 组与组之间的基础间隔
+            const float groupGapJitter = 0.35f;  // 间隔抖动，避免像节拍器
+
+            // 每组 9 只左右，组数夹在 6~18 之间：
+            // 早期一波 10 组左右，后期敌人多就变成 18 组、每组更多，但节奏不变
+            int groupCount = Mathf.Clamp(Mathf.RoundToInt(roster.Count / 9f), 6, 18);
+            int groupSize = Mathf.CeilToInt(roster.Count / (float)groupCount);
+
+            float t = boss ? 3.0f : 0.8f;   // 有 BOSS 时先让 BOSS 出场 1.2 秒
+            int idx = 0;
+            for (int gi = 0; gi < groupCount && idx < roster.Count; gi++)
+            {
+                int take = Mathf.Min(groupSize, roster.Count - idx);
+                for (int j = 0; j < take; j++, idx++)
                 {
-                    int groupSize = Mathf.Min(remaining, Random.Range(5, 11));
-                    Vector3 bp = SpawnPoint();
-                    for (int i = 0; i < groupSize; i++)
+                    pending.Add(new SpawnReq
                     {
-                        Vector3 p = bp + new Vector3(Random.Range(-3f, 3f), Random.Range(-3f, 3f), 0f);
-                        p.x = Mathf.Clamp(p.x, -AX + 2f, AX - 2f);
-                        p.y = Mathf.Clamp(p.y, -AY + 2f, AY - 2f);
-                        pending.Add(new SpawnReq { Kind = kv.Key, Pos = p, Delay = d + i * 0.08f, Size = 1f });
-                    }
-                    remaining -= groupSize;
-                    d += 0.45f;
+                        Kind = roster[idx],
+                        Delay = t + j * inGroupGap,
+                        Size = 1f,
+                        Live = true,
+                    });
                 }
-                delay += 0.2f;
+                t += take * inGroupGap + groupGap + Random.Range(-groupGapJitter, groupGapJitter);
             }
 
             Hud.Announce("WAVE " + n, 1.8f);
@@ -591,7 +620,8 @@ namespace GeoClash
                 s.Delay -= dt;
                 if (s.Delay <= 0f)
                 {
-                    SpawnAt(s.Kind, s.Pos, s.Size);
+                    // Live 的位置在这里才算：围绕主角"此刻"的位置找远处的点
+                    SpawnAt(s.Kind, s.Live ? SpawnPoint() : s.Pos, s.Size);
                     Sfx.Spawn();
                     pending.RemoveAt(i);
                 }
@@ -669,7 +699,6 @@ namespace GeoClash
             camInit = false;
             respawnTimer = 0f;
             gameOverDelay = 0f;
-            pullAccum = Vector2.zero;
 
             ClearWorld();
             State = GameState.Playing;
@@ -735,17 +764,17 @@ namespace GeoClash
             deathPos = Player.transform.position;
 
             Player.Die();
-            Lives--;
+            if (!InfiniteLives) Lives--;
             Multiplier = Mathf.Max(1f, Multiplier * 0.5f);
 
-            if (Lives < 0) GameOver();
+            if (!InfiniteLives && Lives < 0) GameOver();
             else respawnTimer = 1.5f;
         }
 
         void UpdateRespawn(float dt)
         {
             if (PlayerAlive || State != GameState.Playing) return;
-            if (Lives < 0) return;
+            if (!InfiniteLives && Lives < 0) return;
             respawnTimer -= dt;
             if (respawnTimer <= 0f)
             {

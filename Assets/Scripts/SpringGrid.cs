@@ -215,18 +215,6 @@ namespace GeoClash
             I.maxOffsetCur = Mathf.Max(MaxOffset, sp.radius);
         }
 
-        /// <summary>吸附进行中时移动黑洞位置（调试场景"跟随鼠标"用）。</summary>
-        public static void MoveSuction(Vector2 p)
-        {
-            if (I == null) return;
-            I.suckPos = p;
-        }
-
-        /// <summary>当前是否正在吸附（调试场景显示用）。</summary>
-        public static bool SuctionActive { get { return I != null && I.suckTime > 0f; } }
-        public static Vector2 SuctionPos { get { return I != null ? I.suckPos : Vector2.zero; } }
-        public static float SuctionLeft { get { return I != null ? Mathf.Max(0f, I.suckTime) : 0f; } }
-
         void ApplyPush(Vector2 p, float radius, float strength)
         {
             if (!ready || radius <= 0.001f || strength == 0f) return;
@@ -377,6 +365,69 @@ namespace GeoClash
             }
         }
 
+        /// <summary>
+        /// 敌人力场对网格的持续作用。引力井把质点往中心拽（塌出一个坑），
+        /// 黑洞把质点往外推（鼓出一个包）。每帧施加一次加速度，和弹簧回弹平衡后
+        /// 形成一块**静态形变**，跟着敌人一起移动。
+        ///
+        /// 方向和衰减都按**静止位置**算（rest），不按当前位置 ——
+        /// 否则质点被拉近后力会继续变大，会一路塌进中心收不回来。
+        /// </summary>
+        void ApplyRadialField(Vector2 center, float radius, float strength, float dt)
+        {
+            if (!ready || radius <= 0.001f || strength == 0f) return;
+
+            float2 pf = new float2(center.x, center.y);
+
+            int c0 = Mathf.Max(0, Mathf.FloorToInt((center.x - radius + Game.AX) / Cell));
+            int c1 = Mathf.Min(cols - 1, Mathf.CeilToInt((center.x + radius + Game.AX) / Cell));
+            int r0 = Mathf.Max(0, Mathf.FloorToInt((center.y - radius + Game.AY) / Cell));
+            int r1 = Mathf.Min(rows - 1, Mathf.CeilToInt((center.y + radius + Game.AY) / Cell));
+
+            float r2 = radius * radius;
+            var vel = aIsCurrent ? velA : velB;
+
+            for (int r = r0; r <= r1; r++)
+            {
+                for (int c = c0; c <= c1; c++)
+                {
+                    int i = r * cols + c;
+                    if (pinned[i] != 0) continue;
+
+                    float2 d = rest[i] - pf;
+                    float d2 = math.dot(d, d);
+                    if (d2 > r2 || d2 < 1e-4f) continue;
+
+                    float dist = math.sqrt(d2);
+                    float edge = 1f - dist / radius;
+                    edge = edge * edge * (3f - 2f * edge);   // smoothstep：边界不留硬环
+
+                    vel[i] += (d / dist) * (strength * edge * dt);
+                }
+            }
+        }
+
+        /// <summary>遍历场上存活的引力井 / 黑洞，把各自的力场加到网格上。</summary>
+        void ApplyEnemyFields(float dt)
+        {
+            Enemy.PruneFields();          // 每帧兜底清理一次，列表只有 2~5 个，开销可忽略
+
+            var list = Enemy.Fields;
+            if (list == null || list.Count == 0) return;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                var e = list[i];
+                if (e == null || e.Dead) continue;
+                Vector2 p = new Vector2(e.Pos.x, e.Pos.y);
+
+                if (e.Kind == EnemyKind.Gravity)
+                    ApplyRadialField(p, Enemy.GravityGridRadius, Enemy.GravityGridAccel, dt);
+                else if (e.Kind == EnemyKind.Hole)
+                    ApplyRadialField(p, Enemy.HoleGridRadius, Enemy.HoleGridAccel, dt);
+            }
+        }
+
         // ------------------------------------------------------------ 模拟
 
         void LateUpdate()
@@ -387,7 +438,9 @@ namespace GeoClash
             if (dt <= 0f) return;
             dt = Mathf.Min(dt, 0.05f);
 
-            // 黑洞吸附是"持续施力"，每帧施加一次，必须在子步积分之前
+            // 敌人力场（引力井/黑洞）和黑洞吸附都是"持续施力"，每帧施加一次，
+            // 必须在子步积分之前
+            ApplyEnemyFields(dt);
             ApplySuction(dt);
 
             // 吸附结束后把限幅慢慢收回来

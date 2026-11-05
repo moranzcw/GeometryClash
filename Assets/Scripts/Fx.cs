@@ -162,9 +162,6 @@ namespace GeoClash
             if (c != null) camBase = c.transform.position;
         }
 
-        /// <summary>当前存活粒子数（调试用）。</summary>
-        public int ParticleCount { get { return count; } }
-
         // ---------------- 粒子 ----------------
 
         void Add(Vector3 pos, Vector3 vel, Color c, float life, float size, float drag,

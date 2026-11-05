@@ -17,6 +17,34 @@ namespace GeoClash
         public int ScoreValue = 10;
         public Color BaseColor = Color.white;
 
+        // ------------------------------------------------------------ 力场参数
+        //
+        // 引力井和黑洞不再是"推主角"，而是各自带着一个力场，同时作用于**子弹**和**网格**：
+        //
+        //   引力井 Gravity —— 弱吸引：经过的子弹朝它弯折；网格向内塌出一个坑。
+        //   黑洞   Hole    —— 强排斥：经过的子弹被甩开；网格向外鼓出一个包。
+        //
+        // 子弹那边是**只弯不减速**：力只取垂直于弹道的分量，所以正对着场心飞来的
+        // 子弹分量为 0，完全偏转不了（这正是想要的手感），速度大小也严格不变。
+
+        /// <summary>引力井：力场半径（世界单位）。</summary>
+        public const float GravityFieldRadius = 16.5f;
+        /// <summary>引力井：场心处的最大弯折角速度（弧度/秒）。</summary>
+        public const float GravityBendRate = 4.8f;
+        /// <summary>引力井：网格加速度，负值 = 向内塌。</summary>
+        public const float GravityGridAccel = -20f;
+        /// <summary>引力井：网格力场半径。</summary>
+        public const float GravityGridRadius = 8f;
+
+        /// <summary>黑洞：力场半径。</summary>
+        public const float HoleFieldRadius = 9f;
+        /// <summary>黑洞：场心处的最大弯折角速度（比引力井猛一倍）。</summary>
+        public const float HoleBendRate = 8.2f;
+        /// <summary>黑洞：网格加速度，正值 = 向外鼓。</summary>
+        public const float HoleGridAccel = 58f;
+        /// <summary>黑洞：网格力场半径。</summary>
+        public const float HoleGridRadius = 10f;
+
         /// <summary>
         /// 缓存的世界坐标，每个 Update 末尾同步一次。
         ///
@@ -65,9 +93,49 @@ namespace GeoClash
             return e;
         }
 
+        /// <summary>
+        /// 场上所有带力场的敌人（引力井 / 黑洞）。子弹和弹簧网格都读这个列表。
+        /// 由 Enemy 自己注册/注销，所以不依赖 Game —— 测试场景里没有 Game 也能生效。
+        /// 读的时候仍然要判 Dead：敌人死亡到真正销毁之间有一个窗口。
+        /// </summary>
+        public static readonly List<Enemy> Fields = new List<Enemy>();
+
+        /// <summary>这个种类是否带力场。</summary>
+        public static bool HasField(EnemyKind k)
+        {
+            return k == EnemyKind.Gravity || k == EnemyKind.Hole;
+        }
+
+        /// <summary>
+        /// 清掉列表里已经销毁 / 已死亡但还没从列表移除的条目。
+        /// 主要靠 OnDisable 注销，但 OnDisable 在某些时机不一定会跑（比如编辑器里没进 Play），
+        /// 所以每帧再兜一次底，避免这个静态列表只增不减。
+        /// </summary>
+        public static void PruneFields()
+        {
+            for (int i = Fields.Count - 1; i >= 0; i--)
+            {
+                var e = Fields[i];
+                if (e == null || e.Dead) Fields.RemoveAt(i);
+            }
+        }
+
+        void OnEnable()
+        {
+            if (HasField(Kind) && !Fields.Contains(this)) Fields.Add(this);
+        }
+
+        void OnDisable()
+        {
+            Fields.Remove(this);
+        }
+
         void Setup(EnemyKind kind, float size)
         {
             Kind = kind;
+            // OnEnable 在 AddComponent 时就跑了，那时 Kind 还是默认值 Grunt，
+            // 所以真正的种类确定后要补注册一次
+            if (HasField(kind) && !Fields.Contains(this)) Fields.Add(this);
             Size = Mathf.Max(0.25f, size);
 
             switch (kind)
@@ -389,22 +457,13 @@ namespace GeoClash
                 }
 
                 case EnemyKind.Gravity:
+                    // 只缓慢逼近。力场不再作用于主角 —— 改成弯折子弹 + 拉扯网格（见 Bullet.ApplyFields / SpringGrid）
                     vel = Vector2.MoveTowards(vel, toPN * Speed, 4f * dt);
-                    if (g.PlayerAlive && dist < 10f)
-                    {
-                        float k = 1f - dist / 10f;
-                        g.AddPlayerPull(toPN * (k * k * 30f));
-                    }
                     spin += dt * 70f;
                     break;
 
                 case EnemyKind.Hole:
                     vel = Vector2.MoveTowards(vel, toPN * Speed, 2f * dt);
-                    if (g.PlayerAlive && dist < 12f)
-                    {
-                        float k = 1f - dist / 12f;
-                        g.AddPlayerPull(toPN * (k * k * 46f));
-                    }
                     spin += dt * 55f;
                     break;
 

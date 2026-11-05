@@ -267,9 +267,8 @@ namespace GeoClash
                 }
             }
 
-            // 位移（含重力井拉力）
-            Vector2 pull = Game.I.ConsumePull();
-            Vector3 p = transform.position + new Vector3(vel.x + pull.x, vel.y + pull.y, 0f) * dt;
+            // 位移（引力井/黑洞已经不再拉扯主角，这里只剩自身速度）
+            Vector3 p = transform.position + new Vector3(vel.x, vel.y, 0f) * dt;
             p.x = Mathf.Clamp(p.x, -Game.AX + Radius, Game.AX - Radius);
             p.y = Mathf.Clamp(p.y, -Game.AY + Radius, Game.AY - Radius);
             transform.position = p;
