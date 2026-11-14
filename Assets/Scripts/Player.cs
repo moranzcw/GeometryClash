@@ -269,8 +269,8 @@ namespace GeoClash
 
             // 位移（引力井/黑洞已经不再拉扯主角，这里只剩自身速度）
             Vector3 p = transform.position + new Vector3(vel.x, vel.y, 0f) * dt;
-            p.x = Mathf.Clamp(p.x, -Game.AX + Radius, Game.AX - Radius);
-            p.y = Mathf.Clamp(p.y, -Game.AY + Radius, Game.AY - Radius);
+            p.x = Mathf.Clamp(p.x, -Arena.HalfW + Radius, Arena.HalfW - Radius);
+            p.y = Mathf.Clamp(p.y, -Arena.HalfH + Radius, Arena.HalfH - Radius);
             transform.position = p;
 
             // 瞄准（同时决定子弹方向和机身朝向）

@@ -96,8 +96,8 @@ namespace GeoClash
             Vector3 gp = transform.position + new Vector3(vel.x, vel.y, 0f) * dt;
 
             // 掉落物同样不许出框，撞到边界反弹
-            float lx = Game.AX - 0.4f;
-            float lz = Game.AY - 0.4f;
+            float lx = Arena.HalfW - 0.4f;
+            float lz = Arena.HalfH - 0.4f;
             if (gp.x > lx) { gp.x = lx; vel.x = -Mathf.Abs(vel.x) * 0.6f; }
             else if (gp.x < -lx) { gp.x = -lx; vel.x = Mathf.Abs(vel.x) * 0.6f; }
             if (gp.y > lz) { gp.y = lz; vel.y = -Mathf.Abs(vel.y) * 0.6f; }

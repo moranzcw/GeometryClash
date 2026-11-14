@@ -80,15 +80,15 @@ namespace GeoClash
 
             // 撞到竞技场边界：就地炸开，绝不飞出方框
             Vector2 normal = Vector2.zero;
-            if (p.x >= Game.AX) normal = new Vector2(-1f, 0f);
-            else if (p.x <= -Game.AX) normal = new Vector2(1f, 0f);
-            else if (p.y >= Game.AY) normal = new Vector2(0f, -1f);
-            else if (p.y <= -Game.AY) normal = new Vector2(0f, 1f);
+            if (p.x >= Arena.HalfW) normal = new Vector2(-1f, 0f);
+            else if (p.x <= -Arena.HalfW) normal = new Vector2(1f, 0f);
+            else if (p.y >= Arena.HalfH) normal = new Vector2(0f, -1f);
+            else if (p.y <= -Arena.HalfH) normal = new Vector2(0f, 1f);
 
             if (normal != Vector2.zero)
             {
-                p.x = Mathf.Clamp(p.x, -Game.AX, Game.AX);
-                p.y = Mathf.Clamp(p.y, -Game.AY, Game.AY);
+                p.x = Mathf.Clamp(p.x, -Arena.HalfW, Arena.HalfW);
+                p.y = Mathf.Clamp(p.y, -Arena.HalfH, Arena.HalfH);
                 transform.position = p;
 
                 Fx.I.Impact(p, normal, color, Friendly ? 1f : 0.7f);

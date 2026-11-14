@@ -90,7 +90,10 @@ Assets/
 │   └── GridCell.shader        Spring-grid cell: major lines + minor lines + vertex dots
 ├── Scripts/
 │   ├── Boot.cs                Runtime auto-bootstrap
-│   ├── Game.cs                Main controller: waves / scoring / collisions / camera / post-processing
+│   ├── Game.cs                Main controller: state machine / scoring / collisions / factories
+│   ├── Arena.cs               Arena geometry constants (half-width / half-height)
+│   ├── WaveDirector.cs        Wave composition: weighted draft, grouping, spawn schedule
+│   ├── CameraRig.cs           Camera setup, framing and follow
 │   ├── Player.cs              Player movement, aiming, firing, dashing, respawn
 │   ├── Enemy.cs               All 9 enemy behaviours (dispatched by Kind)
 │   ├── Bullet.cs / Geom.cs    Bullets and pickups (pooled)
@@ -122,8 +125,8 @@ Assets/
   speed in `Fire()`.
 - **Bloom strength**: the colour components in `Palette.cs` (values above 1 trigger bloom), and the
   threshold/intensity in `Game.BuildPostFx()`.
-- **Arena size**: `Game.AX / AY` (currently **41.3 / 24.5**, i.e. 82.6 × 49). Note that
-  `SpringGrid`'s particle count is `(2AX/Cell+1) × (2AY/Cell+1)` with `Cell = 0.35`.
+- **Arena size**: `Arena.HalfW / HalfH` (currently **41.3 / 24.5**, i.e. 82.6 × 49). Note that
+  `SpringGrid`'s particle count is `(2·HalfW/Cell+1) × (2·HalfH/Cell+1)` with `Cell = 0.35`.
 - **Pickup drop rate**: `Game.GeomDropRate` (currently 0.2, so only 20% of drops appear).
 - **Magnet range and strength**: `AttractRange` (40, slow attraction from anywhere) /
   `MagnetRadius` (4.2 = 3 major cells, snaps in hard once inside) / `CollectRadius` (2.0, auto-collect)

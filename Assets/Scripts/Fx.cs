@@ -428,11 +428,11 @@ namespace GeoClash
                 // 与竞技场边界弹性碰撞
                 if (p.bounce > 0f)
                 {
-                    if (p.pos.x > Game.AX) { p.pos.x = Game.AX; p.vel.x = -Mathf.Abs(p.vel.x) * p.bounce; }
-                    else if (p.pos.x < -Game.AX) { p.pos.x = -Game.AX; p.vel.x = Mathf.Abs(p.vel.x) * p.bounce; }
+                    if (p.pos.x > Arena.HalfW) { p.pos.x = Arena.HalfW; p.vel.x = -Mathf.Abs(p.vel.x) * p.bounce; }
+                    else if (p.pos.x < -Arena.HalfW) { p.pos.x = -Arena.HalfW; p.vel.x = Mathf.Abs(p.vel.x) * p.bounce; }
 
-                    if (p.pos.y > Game.AY) { p.pos.y = Game.AY; p.vel.y = -Mathf.Abs(p.vel.y) * p.bounce; }
-                    else if (p.pos.y < -Game.AY) { p.pos.y = -Game.AY; p.vel.y = Mathf.Abs(p.vel.y) * p.bounce; }
+                    if (p.pos.y > Arena.HalfH) { p.pos.y = Arena.HalfH; p.vel.y = -Mathf.Abs(p.vel.y) * p.bounce; }
+                    else if (p.pos.y < -Arena.HalfH) { p.pos.y = -Arena.HalfH; p.vel.y = Mathf.Abs(p.vel.y) * p.bounce; }
                 }
 
                 ps[i] = p;

@@ -115,8 +115,8 @@ namespace GeoClash
 
         void Build()
         {
-            cols = Mathf.RoundToInt(2f * Game.AX / Cell) + 1;
-            rows = Mathf.RoundToInt(2f * Game.AY / Cell) + 1;
+            cols = Mathf.RoundToInt(2f * Arena.HalfW / Cell) + 1;
+            rows = Mathf.RoundToInt(2f * Arena.HalfH / Cell) + 1;
             n = cols * rows;
 
             rest = new NativeArray<float2>(n, Allocator.Persistent);
@@ -132,7 +132,7 @@ namespace GeoClash
                 for (int c = 0; c < cols; c++)
                 {
                     int i = r * cols + c;
-                    float2 p = new float2(-Game.AX + c * Cell, -Game.AY + r * Cell);
+                    float2 p = new float2(-Arena.HalfW + c * Cell, -Arena.HalfH + r * Cell);
                     rest[i] = p;
                     posA[i] = p;
                     posB[i] = p;
@@ -221,10 +221,10 @@ namespace GeoClash
 
             float2 pf = new float2(p.x, p.y);
 
-            int c0 = Mathf.Max(0, Mathf.FloorToInt((p.x - radius + Game.AX) / Cell));
-            int c1 = Mathf.Min(cols - 1, Mathf.CeilToInt((p.x + radius + Game.AX) / Cell));
-            int r0 = Mathf.Max(0, Mathf.FloorToInt((p.y - radius + Game.AY) / Cell));
-            int r1 = Mathf.Min(rows - 1, Mathf.CeilToInt((p.y + radius + Game.AY) / Cell));
+            int c0 = Mathf.Max(0, Mathf.FloorToInt((p.x - radius + Arena.HalfW) / Cell));
+            int c1 = Mathf.Min(cols - 1, Mathf.CeilToInt((p.x + radius + Arena.HalfW) / Cell));
+            int r0 = Mathf.Max(0, Mathf.FloorToInt((p.y - radius + Arena.HalfH) / Cell));
+            int r1 = Mathf.Min(rows - 1, Mathf.CeilToInt((p.y + radius + Arena.HalfH) / Cell));
 
             float r2 = radius * radius;
             var vel = aIsCurrent ? velA : velB;   // 写到最新的那一份，下一子步会读它
@@ -260,10 +260,10 @@ namespace GeoClash
             // 采样中心前移半个半径：波峰落在子弹前方，看起来像被"顶"出来的水波
             float2 center = pf + df * (radius * 0.5f);
 
-            int c0 = Mathf.Max(0, Mathf.FloorToInt((center.x - radius + Game.AX) / Cell));
-            int c1 = Mathf.Min(cols - 1, Mathf.CeilToInt((center.x + radius + Game.AX) / Cell));
-            int r0 = Mathf.Max(0, Mathf.FloorToInt((center.y - radius + Game.AY) / Cell));
-            int r1 = Mathf.Min(rows - 1, Mathf.CeilToInt((center.y + radius + Game.AY) / Cell));
+            int c0 = Mathf.Max(0, Mathf.FloorToInt((center.x - radius + Arena.HalfW) / Cell));
+            int c1 = Mathf.Min(cols - 1, Mathf.CeilToInt((center.x + radius + Arena.HalfW) / Cell));
+            int r0 = Mathf.Max(0, Mathf.FloorToInt((center.y - radius + Arena.HalfH) / Cell));
+            int r1 = Mathf.Min(rows - 1, Mathf.CeilToInt((center.y + radius + Arena.HalfH) / Cell));
 
             float r2 = radius * radius;
             var vel = aIsCurrent ? velA : velB;
@@ -317,10 +317,10 @@ namespace GeoClash
 
             float2 pf = new float2(suckPos.x, suckPos.y);
 
-            int c0 = Mathf.Max(0, Mathf.FloorToInt((suckPos.x - radius + Game.AX) / Cell));
-            int c1 = Mathf.Min(cols - 1, Mathf.CeilToInt((suckPos.x + radius + Game.AX) / Cell));
-            int r0 = Mathf.Max(0, Mathf.FloorToInt((suckPos.y - radius + Game.AY) / Cell));
-            int r1 = Mathf.Min(rows - 1, Mathf.CeilToInt((suckPos.y + radius + Game.AY) / Cell));
+            int c0 = Mathf.Max(0, Mathf.FloorToInt((suckPos.x - radius + Arena.HalfW) / Cell));
+            int c1 = Mathf.Min(cols - 1, Mathf.CeilToInt((suckPos.x + radius + Arena.HalfW) / Cell));
+            int r0 = Mathf.Max(0, Mathf.FloorToInt((suckPos.y - radius + Arena.HalfH) / Cell));
+            int r1 = Mathf.Min(rows - 1, Mathf.CeilToInt((suckPos.y + radius + Arena.HalfH) / Cell));
 
             var pos = aIsCurrent ? posA : posB;
             var vel = aIsCurrent ? velA : velB;
@@ -379,10 +379,10 @@ namespace GeoClash
 
             float2 pf = new float2(center.x, center.y);
 
-            int c0 = Mathf.Max(0, Mathf.FloorToInt((center.x - radius + Game.AX) / Cell));
-            int c1 = Mathf.Min(cols - 1, Mathf.CeilToInt((center.x + radius + Game.AX) / Cell));
-            int r0 = Mathf.Max(0, Mathf.FloorToInt((center.y - radius + Game.AY) / Cell));
-            int r1 = Mathf.Min(rows - 1, Mathf.CeilToInt((center.y + radius + Game.AY) / Cell));
+            int c0 = Mathf.Max(0, Mathf.FloorToInt((center.x - radius + Arena.HalfW) / Cell));
+            int c1 = Mathf.Min(cols - 1, Mathf.CeilToInt((center.x + radius + Arena.HalfW) / Cell));
+            int r0 = Mathf.Max(0, Mathf.FloorToInt((center.y - radius + Arena.HalfH) / Cell));
+            int r1 = Mathf.Min(rows - 1, Mathf.CeilToInt((center.y + radius + Arena.HalfH) / Cell));
 
             float r2 = radius * radius;
             var vel = aIsCurrent ? velA : velB;

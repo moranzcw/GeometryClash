@@ -158,7 +158,7 @@ namespace GeoClash
             fireTimer = Random.Range(0.6f, 2.0f);
             stateTimer = Random.Range(0.4f, 1.6f);
             phase = Random.Range(0, 100);
-            entered = Mathf.Abs(transform.position.x) < Game.AX - 0.5f && Mathf.Abs(transform.position.y) < Game.AY - 0.5f;
+            entered = Mathf.Abs(transform.position.x) < Arena.HalfW - 0.5f && Mathf.Abs(transform.position.y) < Arena.HalfH - 0.5f;
 
             // Boss 在自己的生成点附近游弋（场地变大后不能再横扫全场）
             if (kind == EnemyKind.Boss)
@@ -385,10 +385,10 @@ namespace GeoClash
                     // 贴边时往回拐，避免在边框和角落磨蹭
                     Vector2 away = Vector2.zero;
                     const float edge = 7f;
-                    if (pos.x > Game.AX - edge) away.x -= 1f;
-                    if (pos.x < -Game.AX + edge) away.x += 1f;
-                    if (pos.y > Game.AY - edge) away.y -= 1f;
-                    if (pos.y < -Game.AY + edge) away.y += 1f;
+                    if (pos.x > Arena.HalfW - edge) away.x -= 1f;
+                    if (pos.x < -Arena.HalfW + edge) away.x += 1f;
+                    if (pos.y > Arena.HalfH - edge) away.y -= 1f;
+                    if (pos.y < -Arena.HalfH + edge) away.y += 1f;
                     if (away.sqrMagnitude > 0f) want += away.normalized * 1.4f;
 
                     vel = Vector2.MoveTowards(vel, want.normalized * Speed, 24f * dt);
@@ -403,8 +403,8 @@ namespace GeoClash
                     {
                         stateTimer = Random.Range(2.6f, 4.2f);
                         hover = new Vector2(
-                            Mathf.Clamp(pp.x + Random.Range(-12f, 12f), -Game.AX + 4f, Game.AX - 4f),
-                            Mathf.Clamp(pp.y + Random.Range(-12f, 12f), -Game.AY + 4f, Game.AY - 4f));
+                            Mathf.Clamp(pp.x + Random.Range(-12f, 12f), -Arena.HalfW + 4f, Arena.HalfW - 4f),
+                            Mathf.Clamp(pp.y + Random.Range(-12f, 12f), -Arena.HalfH + 4f, Arena.HalfH - 4f));
                     }
                     Vector2 toH = hover - pos;
                     Vector2 want = toH.magnitude > 0.5f ? toH.normalized * Speed : Vector2.zero;
@@ -483,8 +483,8 @@ namespace GeoClash
                     float orbitR = 8f + Mathf.Sin(t * 0.5f) * 2.5f;
                     Vector2 tgt = new Vector2(pp.x, pp.y) - toPN * orbitR
                                   + toPN.Rotate90() * (Mathf.Sin(t * 0.85f) * 5f);
-                    tgt.x = Mathf.Clamp(tgt.x, -Game.AX + 5f, Game.AX - 5f);
-                    tgt.y = Mathf.Clamp(tgt.y, -Game.AY + 5f, Game.AY - 5f);
+                    tgt.x = Mathf.Clamp(tgt.x, -Arena.HalfW + 5f, Arena.HalfW - 5f);
+                    tgt.y = Mathf.Clamp(tgt.y, -Arena.HalfH + 5f, Arena.HalfH - 5f);
                     Vector2 want = tgt - pos;
                     vel = Vector2.MoveTowards(vel, want.magnitude > 0.4f ? want.normalized * Mathf.Min(Speed, want.magnitude * 1.5f) : Vector2.zero, 6f * dt);
 
@@ -533,7 +533,7 @@ namespace GeoClash
             }
 
             // 自愈：万一因为异常位移跑到场外，重新走一遍入场流程
-            if (entered && (Mathf.Abs(transform.position.x) > Game.AX + 2f || Mathf.Abs(transform.position.y) > Game.AY + 2f))
+            if (entered && (Mathf.Abs(transform.position.x) > Arena.HalfW + 2f || Mathf.Abs(transform.position.y) > Arena.HalfH + 2f))
             {
                 entered = false;
             }
@@ -557,14 +557,14 @@ namespace GeoClash
             if (!entered)
             {
                 // 入场途中也不允许无限远离
-                np.x = Mathf.Clamp(np.x, -Game.AX - 7f, Game.AX + 7f);
-                np.y = Mathf.Clamp(np.y, -Game.AY - 7f, Game.AY + 7f);
-                if (Mathf.Abs(np.x) < Game.AX - 0.5f && Mathf.Abs(np.y) < Game.AY - 0.5f) entered = true;
+                np.x = Mathf.Clamp(np.x, -Arena.HalfW - 7f, Arena.HalfW + 7f);
+                np.y = Mathf.Clamp(np.y, -Arena.HalfH - 7f, Arena.HalfH + 7f);
+                if (Mathf.Abs(np.x) < Arena.HalfW - 0.5f && Mathf.Abs(np.y) < Arena.HalfH - 0.5f) entered = true;
             }
             else
             {
-                float lx = Game.AX - Radius * 0.55f;
-                float lz = Game.AY - Radius * 0.55f;
+                float lx = Arena.HalfW - Radius * 0.55f;
+                float lz = Arena.HalfH - Radius * 0.55f;
                 if (np.x > lx) { np.x = lx; vel.x = -Mathf.Abs(vel.x) * 0.8f; }
                 if (np.x < -lx) { np.x = -lx; vel.x = Mathf.Abs(vel.x) * 0.8f; }
                 if (np.y > lz) { np.y = lz; vel.y = -Mathf.Abs(vel.y) * 0.8f; }

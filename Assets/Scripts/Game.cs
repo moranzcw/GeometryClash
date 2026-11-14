@@ -18,14 +18,11 @@ namespace GeoClash
     /// Boot.cs 的 RuntimeInitializeOnLoadMethod 会自动补建这个物体。
     /// </summary>
     [DisallowMultipleComponent]
-    public class Game : MonoBehaviour
+    public class Game : MonoBehaviour, IWaveHost
     {
         public static Game I;
 
-        // 场地半宽/半高。取值保证 2*AX/1.4 与 2*AY/1.4 都是整数，
-        // 弹簧网格才能严格铺满场地边界（否则边缘会差半格，露出缝隙）。
-        public const float AX = 41.3f;   // 82.6 宽 = 59 格 × 1.4
-        public const float AY = 24.5f;   // 49.0 高 = 35 格 × 1.4
+        // 场地尺寸在 Arena 里（Arena.HalfW / HalfH）。
 
         [Header("Runtime State (play mode only)")]
         public GameState State = GameState.Title;
@@ -36,11 +33,13 @@ namespace GeoClash
         public const int StartLives = 10;
 
         [Header("Runtime References (assigned in Awake)")]
-        public Camera Cam;
-        public Vector3 CamBase;
         public Transform World;
         public Player Player;
         public Hud Hud;
+
+        /// <summary>相机由 CameraRig 装配和跟随，这里只做转发，外部调用点不用改。</summary>
+        public Camera Cam { get { return rig != null ? rig.Cam : null; } }
+        public Vector3 CamBase { get { return rig != null ? rig.Base : Vector3.zero; } }
 
         public readonly List<Enemy> Enemies = new List<Enemy>();
         public readonly List<Bullet> PlayerBullets = new List<Bullet>();
@@ -50,57 +49,20 @@ namespace GeoClash
         Pool<Bullet> bulletPool;
         Pool<Geom> geomPool;
 
-        float lastAspect = -1f;
+        CameraRig rig = new CameraRig();
+
         float respawnTimer;
         /// <summary>主角阵亡的位置，复活时就在这里原地重生。</summary>
         Vector3 deathPos;
 
-        // 相机偏移强度：主角在场地最左/最右时，相机额外往同方向偏这么多；
-        // 主角在场地中央时偏移为 0，中间线性过渡。
-        const float SwayX = 8.0f;
-        const float SwayY = 6.5f;
-
-        // 推拉呼吸：相机沿自身朝向靠近/远离聚焦点，纯缩放，不产生任何旋转
-        const float DollyAmount = 0.03f;
-        float camDist = 33f;
-        Vector3 camFocus;
-        bool camInit;
-        float viewHalfW = 31f, viewHalfH = 17.5f;
         float gameOverDelay;
-        bool waveActive;
-        float waveBreak;
         float outsideTimer;
         float multGrace;
         float bossHp = -1f, bossHpMax = 1f;
         float ambientTimer;
 
-        struct SpawnReq
-        {
-            public EnemyKind Kind;
-            public Vector3 Pos;
-            public float Delay;
-            public float Size;
-
-            /// <summary>
-            /// true = 位置在**发放那一刻**才算（围绕主角当前位置找一个远处的点）。
-            /// 均匀刷怪必须用这个：一波要铺开几十秒，预先算好的坐标会落在
-            /// 主角几十秒前站的地方，可能直接砸在脸上。
-            /// </summary>
-            public bool Live;
-        }
-
-        readonly List<SpawnReq> pending = new List<SpawnReq>();
-
-        static readonly EnemyKind[] Kinds =
-        {
-            EnemyKind.Grunt, EnemyKind.Wanderer, EnemyKind.Dodger, EnemyKind.Spinner,
-            EnemyKind.Chomper, EnemyKind.Gravity, EnemyKind.Weevil, EnemyKind.Hole
-        };
-        static readonly int[] Weights = { 4, 3, 2, 2, 2, 1, 3, 1 };
-        // 顺序和 Kinds 一一对应：Grunt, Wanderer, Dodger, Spinner, Chomper, Gravity, Weevil, Hole
-        // 引力井第 3 波、黑洞第 5 波就登场（原先是 5 和 8，太靠后，很多人根本见不到）
-        static readonly int[] UnlockWave = { 1, 1, 2, 3, 4, 3, 6, 5 };
-        static readonly int[] Cost = { 2, 2, 3, 4, 3, 5, 2, 6 };
+        /// <summary>波次编排（抽签、分组、时刻表）全部在它里面。</summary>
+        WaveDirector waves;
 
         // ------------------------------------------------------------ 构建
 
@@ -108,6 +70,8 @@ namespace GeoClash
         {
             I = this;
             Application.targetFrameRate = 120;
+
+            waves = new WaveDirector(this);
 
             MatLib.Reset();
             Meshes.ClearCache();
@@ -162,130 +126,7 @@ namespace GeoClash
 
         void BuildCamera()
         {
-            var go = new GameObject("MainCamera");
-            go.tag = "MainCamera";
-            go.transform.SetParent(transform, false);
-            Cam = go.AddComponent<Camera>();
-            Cam.clearFlags = CameraClearFlags.SolidColor;
-            Cam.backgroundColor = Palette.Bg;
-            Cam.orthographic = false;
-            Cam.fieldOfView = 45f;
-            Cam.nearClipPlane = 0.3f;
-            Cam.farClipPlane = 400f;
-            Cam.allowHDR = true;
-            Cam.allowMSAA = false;
-            go.AddComponent<AudioListener>();
-
-            try
-            {
-                var data = Cam.GetUniversalAdditionalCameraData();
-                data.renderPostProcessing = true;
-                data.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
-                data.antialiasingQuality = AntialiasingQuality.High;
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogWarning("[GeoClash] URP 相机数据初始化失败: " + e.Message);
-            }
-
-            UpdateFraming();
-        }
-
-        void UpdateFraming()
-        {
-            if (Cam == null) return;
-            lastAspect = Cam.aspect;
-
-            // 游戏平面立在 z=0 上，相机在 -Z 方向正对着它。
-            // 此时可见范围就是简单的透视投影：halfH = dist*tan(fov/2)，halfW = halfH*aspect。
-            // 1.4 倍视野（原来 19 × 12.5，视野偏小、看不清敌群）
-            const float targetHalfW = 26.6f;
-            const float targetHalfH = 17.5f;
-
-            float halfTan = Mathf.Tan(Cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
-            float distH = targetHalfH / halfTan;
-            float distW = targetHalfW / (halfTan * Mathf.Max(0.35f, Cam.aspect));
-            camDist = Mathf.Max(distH, distW);
-
-            // 实际可见范围（用于跟随夹紧）
-            viewHalfH = halfTan * camDist;
-            viewHalfW = viewHalfH * Cam.aspect;
-
-            ApplyCamera();
-        }
-
-        /// <summary>
-        /// 稳定器式相机：相机站在平面正前方（-Z），姿态永远由
-        /// 「保持水平 + 看向聚焦点」自动决定。
-        ///
-        /// 偏移量由**主角在场地中的相对位置**驱动：
-        /// 主角靠左 → 相机也往左偏；靠右 → 往右偏；上下同理。
-        /// 因为平面是立起来的，偏移会让视线与平面法线产生夹角，
-        /// 画面呈现梯形透视而不会整体旋转。
-        /// </summary>
-        void ApplyCamera()
-        {
-            float t = Time.time;
-
-            // 推拉呼吸：只改变距离，不改变方向
-            float dist = camDist * (1f + Mathf.Sin(t * 0.13f) * DollyAmount);
-
-            // 主角在场地中的归一化位置（-1 = 最左/最下，+1 = 最右/最上）
-            float nx = Mathf.Clamp(camFocus.x / AX, -1f, 1f);
-            float ny = Mathf.Clamp(camFocus.y / AY, -1f, 1f);
-
-            Vector3 camPos = new Vector3(
-                camFocus.x + nx * SwayX,
-                camFocus.y + ny * SwayY,
-                -dist);
-
-            CamBase = camPos;
-
-            if (Cam != null)
-            {
-                Cam.transform.position = camPos;
-                Cam.transform.rotation = Quaternion.LookRotation(camFocus - camPos, Vector3.up);
-            }
-        }
-
-        /// <summary>镜头跟随主角：聚焦点夹在场地内留一点边距，场地外的部分露出黑底（和参考图一致）。</summary>
-        void UpdateCamera(float dt)
-        {
-            Vector3 target = PlayerPos;
-
-            // 前瞻：镜头略微偏向移动方向，强化速度感
-            if (Player != null && Player.Alive)
-            {
-                target += new Vector3(Player.Velocity.x, Player.Velocity.y, 0f) * 0.12f;
-            }
-
-            // 聚焦点夹紧：视野最多越出场地边缘 12 个单位。
-            // 注意视野变大后（62×35）几乎和场地（63×37.8）一样大，留给"跟随"的余量很小——
-            // 如果强行让主角永远居中，镜头必须整块移出场地，反而会丢失边框。
-            const float slack = 12f;
-            float minX = -AX - slack + viewHalfW;
-            float maxX = AX + slack - viewHalfW;
-            float minY = -AY - slack + viewHalfH;
-            float maxY = AY + slack - viewHalfH;
-
-            if (minX > maxX) { float m = (minX + maxX) * 0.5f; minX = m; maxX = m; }
-            if (minY > maxY) { float m = (minY + maxY) * 0.5f; minY = m; maxY = m; }
-
-            target.x = Mathf.Clamp(target.x, minX, maxX);
-            target.y = Mathf.Clamp(target.y, minY, maxY);
-            target.z = 0f;
-
-            if (!camInit)
-            {
-                camFocus = target;
-                camInit = true;
-            }
-            else
-            {
-                camFocus = Vector3.Lerp(camFocus, target, 1f - Mathf.Exp(-9f * dt));
-            }
-
-            ApplyCamera();
+            rig.Build(transform);
         }
 
         void BuildArena()
@@ -298,7 +139,7 @@ namespace GeoClash
             var borderGo = new GameObject("Border");
             borderGo.transform.SetParent(World, false);
             borderGo.transform.position = new Vector3(0f, 0f, 0.05f);
-            MatLib.Attach(borderGo, Meshes.Border(AX, AY, 0.30f), MatLib.Neon(Palette.Border));
+            MatLib.Attach(borderGo, Meshes.Border(Arena.HalfW, Arena.HalfH, 0.30f), MatLib.Neon(Palette.Border));
         }
 
         void BuildPostFx()
@@ -476,7 +317,7 @@ namespace GeoClash
         /// 24 次随机都不满足时，退回"已找到的候选里离主角最远的那个"，
         /// 再不行才用对角角落——总之绝不会刷在主角身上。
         /// </summary>
-        Vector3 SpawnPoint()
+        public Vector3 SpawnPoint()
         {
             const float margin = 4f;
             const float minDist = 15f;
@@ -492,7 +333,7 @@ namespace GeoClash
                 float dist = Random.Range(minDist, 30f);
                 Vector3 p = new Vector3(pp.x + Mathf.Cos(ang) * dist, pp.y + Mathf.Sin(ang) * dist, 0f);
 
-                if (Mathf.Abs(p.x) > AX - margin || Mathf.Abs(p.y) > AY - margin) continue;
+                if (Mathf.Abs(p.x) > Arena.HalfW - margin || Mathf.Abs(p.y) > Arena.HalfH - margin) continue;
 
                 float d2 = (p - pp).sqrMagnitude;
                 if (d2 >= minDistSqr) return p;
@@ -503,183 +344,67 @@ namespace GeoClash
 
             // 主角把整个环带都挡住了（贴角落时才会发生）：刷到对角去
             return new Vector3(
-                (pp.x >= 0f ? -1f : 1f) * (AX - margin - 2f),
-                (pp.y >= 0f ? -1f : 1f) * (AY - margin - 2f),
+                (pp.x >= 0f ? -1f : 1f) * (Arena.HalfW - margin - 2f),
+                (pp.y >= 0f ? -1f : 1f) * (Arena.HalfH - margin - 2f),
                 0f);
         }
 
-        EnemyKind? PickKind(int wave, int budget)
-        {
-            int total = 0;
-            for (int i = 0; i < Kinds.Length; i++)
-            {
-                if (wave >= UnlockWave[i] && Cost[i] <= budget) total += Weights[i];
-            }
-            if (total <= 0) return null;
+        // ------------------------------------------------------------ 波次接口
 
-            int r = Random.Range(0, total);
-            for (int i = 0; i < Kinds.Length; i++)
-            {
-                if (wave < UnlockWave[i] || Cost[i] > budget) continue;
-                r -= Weights[i];
-                if (r < 0) return Kinds[i];
-            }
-            return null;
-        }
+        // 波次编排在 WaveDirector 里，Game 只提供它需要的那几样东西。
 
-        void StartWave(int n)
+        int IWaveHost.Wave { get { return Wave; } }
+
+        public int AliveEnemyCount { get { return Enemies.Count; } }
+
+        public void OnWaveStarted(int n)
         {
             Wave = n;
-            waveActive = true;
-            pending.Clear();
-
-            bool boss = (n % 5 == 0);
-            int budget = (7 + n * 5) * 15;   // 敌人密度约为最初的 15 倍
-
-            if (boss)
-            {
-                pending.Add(new SpawnReq { Kind = EnemyKind.Boss, Delay = 1.2f, Size = 1f, Live = true });
-                budget = (4 + n * 2) * 9;
-            }
-
-            var counts = new Dictionary<EnemyKind, int>();
-            int guard = 0;
-            while (budget >= 2 && guard++ < 600)
-            {
-                var k = PickKind(n, budget);
-                if (k == null) break;
-                int c = Cost[(int)k.Value];
-                if (c > budget) break;
-                budget -= c;
-                if (counts.ContainsKey(k.Value)) counts[k.Value]++;
-                else counts[k.Value] = 1;
-            }
-
-            // ---- 均匀刷怪 ----
-            // 以前是"按种类分组、每组 5~10 只一口气倒出来、隔 0.45 秒再倒一组"，
-            // 所以一波敌人几秒内就全在场上了。
-            // 现在先把整波要出的敌人摊平成一个列表、打散顺序，
-            // 再按固定间隔逐只发放 —— 敌人会从整波开头一路均匀滴到结尾。
-            var roster = new List<EnemyKind>();
-            foreach (var kv in counts)
-            {
-                for (int i = 0; i < kv.Value; i++) roster.Add(kv.Key);
-            }
-            for (int i = roster.Count - 1; i > 0; i--)
-            {
-                int j = Random.Range(0, i + 1);
-                var tmp = roster[i];
-                roster[i] = roster[j];
-                roster[j] = tmp;
-            }
-
-            // ---- 分组成批刷怪 ----
-            // 一波的敌人先打散、再切成若干组：
-            //   组内几乎同时出现（形成一次"爆发"，能看出是同一批来的）
-            //   组与组之间留一段基础间隔（让玩家有喘息和清场的时间）
-            // 以前组间隔只有 0.45 秒，一波敌人十几秒就全涌出来了，几乎连成一片。
-            const float inGroupGap = 0.06f;      // 组内个体间隔
-            const float groupGap = 1.35f;        // 组与组之间的基础间隔
-            const float groupGapJitter = 0.35f;  // 间隔抖动，避免像节拍器
-
-            // 每组 9 只左右，组数夹在 6~18 之间：
-            // 早期一波 10 组左右，后期敌人多就变成 18 组、每组更多，但节奏不变
-            int groupCount = Mathf.Clamp(Mathf.RoundToInt(roster.Count / 9f), 6, 18);
-            int groupSize = Mathf.CeilToInt(roster.Count / (float)groupCount);
-
-            float t = boss ? 3.0f : 0.8f;   // 有 BOSS 时先让 BOSS 出场 1.2 秒
-            int idx = 0;
-            for (int gi = 0; gi < groupCount && idx < roster.Count; gi++)
-            {
-                int take = Mathf.Min(groupSize, roster.Count - idx);
-                for (int j = 0; j < take; j++, idx++)
-                {
-                    pending.Add(new SpawnReq
-                    {
-                        Kind = roster[idx],
-                        Delay = t + j * inGroupGap,
-                        Size = 1f,
-                        Live = true,
-                    });
-                }
-                t += take * inGroupGap + groupGap + Random.Range(-groupGapJitter, groupGapJitter);
-            }
-
             Hud.Announce("WAVE " + n, 1.8f);
             Sfx.Wave();
         }
 
-        void UpdateSpawns(float dt)
+        public void OnWaveCleared(int n)
         {
-            for (int i = pending.Count - 1; i >= 0; i--)
-            {
-                var s = pending[i];
-                s.Delay -= dt;
-                if (s.Delay <= 0f)
-                {
-                    // Live 的位置在这里才算：围绕主角"此刻"的位置找远处的点
-                    SpawnAt(s.Kind, s.Live ? SpawnPoint() : s.Pos, s.Size);
-                    Sfx.Spawn();
-                    pending.RemoveAt(i);
-                }
-                else
-                {
-                    pending[i] = s;
-                }
-            }
+            outsideTimer = 0f;
+            if (n % WaveDirector.BossEvery == 0) Bombs = Mathf.Min(5, Bombs + 1);
+            Hud.Announce("WAVE CLEAR", 1.5f);
         }
 
-        void UpdateWave(float dt)
+        /// <summary>
+        /// 兜底：敌人全部滞留在场外且持续数秒，说明有敌人卡住了，直接清除，避免波次永远不结束。
+        /// 这是"关于敌人状态"的清理，不属于波次编排，所以留在 Game 里。
+        /// </summary>
+        void CleanupStuckEnemies(float dt)
         {
-            if (waveActive)
+            if (!waves.Active || waves.PendingCount > 0 || Enemies.Count == 0)
             {
-                // 兜底：敌人全部滞留在场外且持续数秒，说明有敌人卡住了，直接清除，避免波次永远不结束
-                if (pending.Count == 0 && Enemies.Count > 0)
-                {
-                    bool allOutside = true;
-                    for (int i = 0; i < Enemies.Count; i++)
-                    {
-                        var e = Enemies[i];
-                        if (e == null) continue;
-                        Vector3 p = e.transform.position;
-                        if (Mathf.Abs(p.x) < AX + 1.5f && Mathf.Abs(p.y) < AY + 1.5f)
-                        {
-                            allOutside = false;
-                            break;
-                        }
-                    }
+                outsideTimer = 0f;
+                return;
+            }
 
-                    outsideTimer = allOutside ? outsideTimer + dt : 0f;
-
-                    if (outsideTimer > 6f)
-                    {
-                        for (int i = Enemies.Count - 1; i >= 0; i--)
-                        {
-                            if (Enemies[i] != null) Enemies[i].Vanish();
-                        }
-                        outsideTimer = 0f;
-                        Debug.LogWarning("[GeoClash] 检测到场外卡死的敌人，已强制清除");
-                    }
-                }
-                else
+            bool allOutside = true;
+            for (int i = 0; i < Enemies.Count; i++)
+            {
+                var e = Enemies[i];
+                if (e == null) continue;
+                Vector3 p = e.transform.position;
+                if (Mathf.Abs(p.x) < Arena.HalfW + 1.5f && Mathf.Abs(p.y) < Arena.HalfH + 1.5f)
                 {
-                    outsideTimer = 0f;
-                }
-
-                if (pending.Count == 0 && Enemies.Count == 0)
-                {
-                    waveActive = false;
-                    waveBreak = 2.2f;
-                    outsideTimer = 0f;
-                    if (Wave % 5 == 0) Bombs = Mathf.Min(5, Bombs + 1);
-                    Hud.Announce("WAVE CLEAR", 1.5f);
+                    allOutside = false;
+                    break;
                 }
             }
-            else
+
+            outsideTimer = allOutside ? outsideTimer + dt : 0f;
+            if (outsideTimer <= 6f) return;
+
+            for (int i = Enemies.Count - 1; i >= 0; i--)
             {
-                waveBreak -= dt;
-                if (waveBreak <= 0f) StartWave(Wave + 1);
+                if (Enemies[i] != null) Enemies[i].Vanish();
             }
+            outsideTimer = 0f;
+            Debug.LogWarning("[GeoClash] 检测到场外卡死的敌人，已强制清除");
         }
 
         // ------------------------------------------------------------ 生命周期
@@ -693,7 +418,7 @@ namespace GeoClash
             Wave = 0;
             Multiplier = 1f;
             multGrace = 0f;
-            camInit = false;
+            rig.ResetFollow();
             respawnTimer = 0f;
             gameOverDelay = 0f;
 
@@ -701,7 +426,7 @@ namespace GeoClash
             State = GameState.Playing;
             Player.Respawn(Vector3.zero);
             Sfx.Ui();
-            StartWave(1);
+            waves.StartWave(1);
         }
 
         void ClearWorld()
@@ -711,7 +436,7 @@ namespace GeoClash
                 if (Enemies[i] != null) Destroy(Enemies[i].gameObject);
             }
             Enemies.Clear();
-            pending.Clear();
+            waves.Clear();
 
             for (int i = 0; i < PlayerBullets.Count; i++) if (PlayerBullets[i] != null) PlayerBullets[i].Despawn();
             for (int i = 0; i < EnemyBullets.Count; i++) if (EnemyBullets[i] != null) EnemyBullets[i].Despawn();
@@ -785,10 +510,10 @@ namespace GeoClash
         void Update()
         {
             if (Cam == null) return;
-            if (Mathf.Abs(Cam.aspect - lastAspect) > 0.002f) UpdateFraming();
+            if (rig.AspectChanged) rig.UpdateFraming();
 
             float dt = Mathf.Min(Time.deltaTime, 0.05f);
-            UpdateCamera(dt);
+            rig.Follow(PlayerPos, Player != null ? Player.Velocity : Vector2.zero, PlayerAlive, dt);
 
             if (Controls.MutePressed()) Sfx.SetMuted(!Sfx.Muted);
 
@@ -816,8 +541,8 @@ namespace GeoClash
             if (multGrace > 0f) multGrace -= dt;
             else Multiplier = Mathf.Max(1f, Multiplier - dt * 0.06f);
 
-            UpdateSpawns(dt);
-            UpdateWave(dt);
+            waves.Update(dt);
+            CleanupStuckEnemies(dt);
             UpdateRespawn(dt);
             UpdateCollisions();
             CleanupLists();
@@ -829,7 +554,7 @@ namespace GeoClash
             ambientTimer -= dt;
             if (ambientTimer > 0f) return;
             ambientTimer = 0.06f;
-            Vector3 p = new Vector3(Random.Range(-AX, AX), Random.Range(-AY, AY), 0f);
+            Vector3 p = new Vector3(Random.Range(-Arena.HalfW, Arena.HalfW), Random.Range(-Arena.HalfH, Arena.HalfH), 0f);
             Fx.I.AddAmbient(p, new Color(0.2f, 0.7f, 1f, 0.5f));
         }
 

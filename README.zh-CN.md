@@ -81,7 +81,10 @@ Assets/
 │   └── GridCell.shader        弹簧网格单元：大格线 + 小格线 + 顶点圆点
 ├── Scripts/
 │   ├── Boot.cs                运行时自动启动
-│   ├── Game.cs                主控：波次/计分/碰撞/镜头/后处理
+│   ├── Game.cs                主控：状态机/计分/碰撞/工厂
+│   ├── Arena.cs               场地几何常量（半宽/半高）
+│   ├── WaveDirector.cs        波次编排：权重抽签、分组、刷怪时刻表
+│   ├── CameraRig.cs           相机装配、取景与跟随
 │   ├── Player.cs              玩家移动、瞄准、射击、冲刺、复活
 │   ├── Enemy.cs               9 种敌人行为（Kind 分派）
 │   ├── Bullet.cs / Geom.cs    子弹与 Geom（对象池）
@@ -111,8 +114,8 @@ Assets/
 - **敌人强度**：`Enemy.Setup()` 里的 `switch (kind)`。
 - **手感**：`Player.cs` 顶部的 `Speed / Accel / DashSpeed` 与 `Fire()` 里的射速、弹速。
 - **辉光强度**：`Palette.cs` 的颜色分量（>1 才会触发 Bloom），以及 `Game.BuildPostFx()` 的阈值/强度。
-- **场地大小**：`Game.AX / AY`（当前 **41.3 / 24.5**，即 82.6 × 49）。
-  改完要注意 `SpringGrid` 的质点数是 `(2AX/Cell+1) × (2AY/Cell+1)`，`Cell` 当前 **0.35**。
+- **场地大小**：`Arena.HalfW / HalfH`（当前 **41.3 / 24.5**，即 82.6 × 49）。
+  改完要注意 `SpringGrid` 的质点数是 `(2·HalfW/Cell+1) × (2·HalfH/Cell+1)`，`Cell` 当前 **0.35**。
 - **掉落物密度**：`Game.GeomDropRate`（当前 0.2，即只有 20% 的掉落量）。
 - **吸附范围/力度**：`Geom.cs` 顶部的 `AttractRange`（40，全程缓慢吸引）/
   `MagnetRadius`（4.2 = 3 个大格，进入后急吸）/ `CollectRadius`（2.0，自动拾取）。
